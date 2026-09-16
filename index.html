@@ -45,6 +45,9 @@
   </div>
 
   <script>
+    // Aapka Render API Base URL
+    const API_BASE = "https://moviesany.onrender.com";
+
     async function fetchScrapedData() {
       const q = document.getElementById('query').value;
       const status = document.getElementById('status');
@@ -54,7 +57,7 @@
       grid.innerHTML = '';
 
       try {
-        const res = await fetch(`/api/scrape?query=${encodeURIComponent(q)}`);
+        const res = await fetch(`${API_BASE}/api/search?query=${encodeURIComponent(q)}`);
         const json = await res.json();
 
         if (!json.success || !json.data || json.data.length === 0) {
@@ -87,10 +90,10 @@
 
       modal.style.display = 'block';
       modalTitle.innerText = title;
-      modalBody.innerHTML = '<p style="color:#94a3b8;">Fetching download links... Please wait...</p>';
+      modalBody.innerHTML = '<p style="color:#94a3b8;">Bypassing Cloudflare & Fetching links...</p>';
 
       try {
-        const res = await fetch(`/api/scrape?detailUrl=${encodedUrl}`);
+        const res = await fetch(`${API_BASE}/api/links?detailUrl=${encodedUrl}`);
         const json = await res.json();
 
         if (!json.success || !json.links || json.links.length === 0) {
