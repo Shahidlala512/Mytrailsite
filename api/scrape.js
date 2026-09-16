@@ -4,7 +4,7 @@ export default async function handler(req, res) {
 
   const { query, detailUrl } = req.query;
 
-  // LAYER 2: Scrape Direct/Quality Links from Single Movie Page
+  // LAYER 2: Extract Direct Download Links from Single Movie Page
   if (detailUrl) {
     try {
       const response = await fetch(detailUrl, {
@@ -18,48 +18,68 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: false, error: 'Could not fetch movie details' });
       }
 
-      const html = await response.text();
+      let html = await response.text();
+
+      // Step 1: Strip out Header, Footer, Sidebar, and Recommended sections from HTML
+      html = html.replace(/<header[\s\S]*?<\/header>/gi, '');
+      html = html.replace(/<footer[\s\S]*?<\/footer>/gi, '');
+      html = html.replace(/<aside[\s\S]*?<\/aside>/gi, '');
+      html = html.replace(/<div[^>]*class="[^"]*(sidebar|related|recommended|widgets|popular)[^"]*"[\s\S]*?<\/div>/gi, '');
+
       const downloadLinks = [];
-
-      // Target only the main content area (ignores sidebar & recommended movies)
-      const contentMatch = html.match(/<div[^>]*class="[^"]*(entry-content|post-content|download-links|thecontent)[^"]*"[\s\S]*?<\/div>/i);
-      const targetHtml = contentMatch ? contentMatch[0] : html;
-
-      // Extract <a> links from target content
       const linkRegex = /<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
       let match;
 
-      while ((match = linkRegex.exec(targetHtml)) !== null) {
-        const href = match[1];
+      while ((match = linkRegex.exec(html)) !== null) {
+        const href = match[1].trim();
         let text = match[2].replace(/<[^>]+>/g, '').trim();
 
-        // Check if link is a download/quality link
-        const isQualityOrDownload =
-          href.includes('/goto/') ||
-          href.includes('/link/') ||
-          href.includes('drive') ||
-          href.includes('gdflix') ||
-          href.includes('filepress') ||
-          href.includes('linkspoint') ||
-          text.toLowerCase().includes('download') ||
-          text.toLowerCase().includes('480p') ||
-          text.toLowerCase().includes('720p') ||
-          text.toLowerCase().includes('1080p');
+        // STRICT FILTER: If link is another MoviesMint movie post page (and NOT a /goto/ download link), REJECT IT!
+        const isMoviesMintPost = (href.includes('moviesmint.app') || href.startsWith('/')) && !href.includes('/goto/');
 
-        // Exclude generic site pages and social links
+        // Junk filter
         const isJunk =
+          isMoviesMintPost ||
           href.includes('#') ||
           href.includes('/category/') ||
           href.includes('/tag/') ||
           href.includes('/page/') ||
+          href.includes('/author/') ||
           href.endsWith('.jpg') ||
           href.endsWith('.png') ||
+          href.endsWith('.webp') ||
           href.endsWith('.css') ||
           href.endsWith('.js') ||
           href.includes('facebook.com') ||
-          href.includes('telegram');
+          href.includes('telegram') ||
+          href.includes('t.me') ||
+          href.includes('whatsapp') ||
+          href.includes('twitter');
 
-        if (isQualityOrDownload && !isJunk) {
+        // Check if it's a genuine link shortener or cloud drive URL
+        const isGotoOrDriveLink =
+          href.includes('/goto/') ||
+          href.includes('/link/') ||
+          href.includes('linkspoint') ||
+          href.includes('gdflix') ||
+          href.includes('filepress') ||
+          href.includes('drive.google') ||
+          href.includes('mega.nz') ||
+          href.includes('pixeldrain') ||
+          href.includes('hubcloud') ||
+          href.includes('fastdl');
+
+        const isDownloadText =
+          text.toLowerCase().includes('download') ||
+          text.toLowerCase().includes('480p') ||
+          text.toLowerCase().includes('720p') ||
+          text.toLowerCase().includes('1080p') ||
+          text.toLowerCase().includes('4k') ||
+          text.toLowerCase().includes('gdrive') ||
+          text.toLowerCase().includes('direct link') ||
+          text.toLowerCase().includes('zip');
+
+        if (!isJunk && (isGotoOrDriveLink || isDownloadText)) {
           downloadLinks.push({
             name: text || 'Download Link',
             url: href
