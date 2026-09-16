@@ -3,58 +3,153 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Movie Search Engine</title>
+  <title>CineHub - Premium Movie Download Portal</title>
   <style>
-    body { background: #0b0f19; color: #fff; font-family: sans-serif; padding: 20px; text-align: center; margin: 0; }
-    .search-box { margin: 20px auto; max-width: 500px; display: flex; gap: 10px; }
-    input { flex: 1; padding: 12px; border-radius: 6px; border: 1px solid #334155; background: #1e293b; color: #fff; }
-    button { padding: 12px 20px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; margin-top: 20px; }
-    .card { background: #1e293b; border-radius: 8px; overflow: hidden; border: 1px solid #334155; text-align: left; display: flex; flex-direction: column; justify-content: space-between; }
-    .card img { width: 100%; height: 220px; object-fit: cover; }
-    .card-title { font-size: 12px; padding: 8px; font-weight: bold; color: #38bdf8; height: 35px; overflow: hidden; }
-    .btn-dl { background: #166534; color: #fff; text-align: center; padding: 10px; font-size: 12px; font-weight: bold; margin: 8px; border-radius: 4px; border: none; cursor: pointer; }
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: #1e293b;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --border: #334155;
+    }
 
-    /* Modal Popup Styling */
-    .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(5px); }
-    .modal-content { background: #1e293b; margin: 15% auto; padding: 20px; border-radius: 12px; max-width: 450px; width: 85%; color: #fff; text-align: center; border: 1px solid #334155; position: relative; }
-    .close-btn { position: absolute; right: 15px; top: 10px; font-size: 24px; cursor: pointer; color: #94a3b8; }
-    .dl-btn-single { display: block; background: #2563eb; color: #fff; padding: 12px; margin: 10px 0; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 13px; text-align: center; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { background: var(--bg-color); color: var(--text-main); min-height: 100vh; padding-bottom: 40px; }
+
+    /* Navbar */
+    .navbar { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background: rgba(15, 23, 42, 0.95); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; backdrop-filter: blur(10px); }
+    .logo { font-size: 20px; font-weight: bold; background: linear-gradient(45deg, #60a5fa, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .nav-badge { font-size: 11px; background: #1e3a8a; color: #93c5fd; padding: 4px 8px; border-radius: 20px; border: 1px solid #3b82f6; }
+
+    /* Hero Search Section */
+    .hero { text-align: center; padding: 30px 15px; background: radial-gradient(circle at center, #1e293b 0%, #0f172a 70%); border-bottom: 1px solid var(--border); }
+    .hero h1 { font-size: 22px; margin-bottom: 15px; font-weight: 600; }
+    .search-box { max-width: 600px; margin: 0 auto; display: flex; gap: 10px; background: var(--card-bg); padding: 6px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5); }
+    .search-box input { flex: 1; padding: 10px 15px; border: none; background: transparent; color: #fff; font-size: 15px; outline: none; }
+    .search-box button { padding: 10px 22px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: background 0.2s; }
+    .search-box button:hover { background: var(--accent-hover); }
+
+    /* Category Chips */
+    .categories { display: flex; gap: 8px; overflow-x: auto; padding: 12px 20px; scrollbar-width: none; margin-top: 10px; justify-content: center; }
+    .categories::-webkit-scrollbar { display: none; }
+    .chip { background: var(--card-bg); border: 1px solid var(--border); color: var(--text-muted); padding: 6px 14px; border-radius: 20px; font-size: 12px; cursor: pointer; white-space: nowrap; transition: all 0.2s; }
+    .chip.active, .chip:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+    /* Ad Banner Space (Top) */
+    .ad-banner { max-width: 728px; margin: 20px auto; background: #1e293b; border: 1px dashed var(--border); text-align: center; padding: 12px; border-radius: 8px; color: var(--text-muted); font-size: 12px; }
+
+    /* Movie Grid Container */
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 15px; }
+    .status-bar { margin: 20px 0 10px; font-size: 14px; color: var(--text-muted); font-weight: 500; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
+
+    /* Movie Card */
+    .card { background: var(--card-bg); border-radius: 10px; overflow: hidden; border: 1px solid var(--border); display: flex; flex-direction: column; justify-content: space-between; transition: transform 0.2s, box-shadow 0.2s; }
+    .card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.4); border-color: #475569; }
+    .poster-wrap { position: relative; width: 100%; height: 210px; overflow: hidden; background: #000; }
+    .card img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s; }
+    .card:hover img { transform: scale(1.05); }
+    .quality-badge { position: absolute; top: 8px; right: 8px; background: rgba(0, 0, 0, 0.75); color: #38bdf8; font-size: 10px; font-weight: bold; padding: 3px 6px; border-radius: 4px; backdrop-filter: blur(4px); }
+    
+    .card-body { padding: 10px; display: flex; flex-direction: column; flex: 1; justify-content: space-between; }
+    .card-title { font-size: 12px; font-weight: 600; color: #f1f5f9; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 10px; line-height: 1.4; }
+    .btn-dl { background: #166534; color: #fff; text-align: center; padding: 8px; font-size: 12px; font-weight: bold; border-radius: 6px; border: none; cursor: pointer; width: 100%; transition: background 0.2s; display: flex; align-items: center; justify-content: center; gap: 5px; }
+    .btn-dl:hover { background: #15803d; }
+
+    /* Modal Popup */
+    .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(6px); }
+    .modal-content { background: var(--card-bg); margin: 20% auto; padding: 20px; border-radius: 14px; max-width: 420px; width: 90%; color: #fff; text-align: center; border: 1px solid var(--border); position: relative; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.7); }
+    .close-btn { position: absolute; right: 15px; top: 12px; font-size: 22px; cursor: pointer; color: var(--text-muted); }
+    .modal-title { font-size: 15px; font-weight: bold; color: #38bdf8; margin-bottom: 15px; padding-right: 20px; }
+    
+    .dl-btn-single { display: flex; align-items: center; justify-content: center; background: #2563eb; color: #fff; padding: 11px 15px; margin: 8px 0; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 13px; transition: background 0.2s; gap: 8px; }
     .dl-btn-single:hover { background: #1d4ed8; }
+
+    /* Loading Spinner */
+    .loader { border: 3px solid #334155; border-top: 3px solid var(--accent); border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 20px auto; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    @media(min-width: 768px) {
+      .grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px; }
+      .poster-wrap { height: 250px; }
+    }
   </style>
 </head>
 <body>
 
-  <h2>Movie Search Engine</h2>
-
-  <div class="search-box">
-    <input type="text" id="query" placeholder="Search Movie..." value="Hindi">
-    <button onclick="fetchScrapedData()">Search</button>
+  <!-- Navbar -->
+  <div class="navbar">
+    <div class="logo">🎬 CineHub</div>
+    <div class="nav-badge">⚡ Fast Server</div>
   </div>
 
-  <div id="status" style="color: #94a3b8;">Click search to fetch movies...</div>
-  <div class="grid" id="movieGrid"></div>
+  <!-- Hero Search Section -->
+  <div class="hero">
+    <h1>Find & Download Your Favorite Movies</h1>
+    <div class="search-box">
+      <input type="text" id="query" placeholder="Search movies (e.g. Avatar, Jawan, Marvel)..." value="Hindi">
+      <button onclick="fetchScrapedData()">Search</button>
+    </div>
 
-  <!-- Popup Modal for Links -->
+    <!-- Category Filter Chips -->
+    <div class="categories">
+      <div class="chip active" onclick="searchCategory('Hindi')">🔥 Hindi Dubbed</div>
+      <div class="chip" onclick="searchCategory('South')">⭐ South Indian</div>
+      <div class="chip" onclick="searchCategory('Action')">💥 Action</div>
+      <div class="chip" onclick="searchCategory('Hollywood')">🌍 Hollywood</div>
+      <div class="chip" onclick="searchCategory('Animation')">🎨 Animation</div>
+    </div>
+  </div>
+
+  <!-- Ad Banner Placeholder (Aap yahan baad me banner ad code daal sakte hain) -->
+  <div class="container">
+    <div class="ad-banner">
+      <span>📢 Advertisement Space (Ready for Ads)</span>
+    </div>
+
+    <div class="status-bar" id="status">Loading latest movies...</div>
+    <div class="grid" id="movieGrid"></div>
+  </div>
+
+  <!-- Popup Modal -->
   <div id="modal" class="modal">
     <div class="modal-content">
       <span class="close-btn" onclick="closeModal()">&times;</span>
-      <h3 id="modalTitle" style="color: #38bdf8; font-size: 15px;">Download Links</h3>
-      <div id="modalBody" style="margin-top: 15px;">Loading links...</div>
+      <div id="modalTitle" class="modal-title">Download Links</div>
+      <div id="modalBody">
+        <div class="loader"></div>
+        <p style="color:var(--text-muted); font-size:13px;">Bypassing security & fetching links...</p>
+      </div>
     </div>
   </div>
 
   <script>
-    // Aapka Render API Base URL
     const API_BASE = "https://moviesany.onrender.com";
+
+    // Page load hote hi default search run karega
+    window.onload = () => {
+      fetchScrapedData();
+    };
+
+    function searchCategory(catName) {
+      document.getElementById('query').value = catName;
+      
+      // Active chip styling update
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      event.target.classList.add('active');
+      
+      fetchScrapedData();
+    }
 
     async function fetchScrapedData() {
       const q = document.getElementById('query').value;
       const status = document.getElementById('status');
       const grid = document.getElementById('movieGrid');
 
-      status.innerText = 'Searching...';
-      grid.innerHTML = '';
+      status.innerText = 'Searching movies...';
+      grid.innerHTML = '<div style="grid-column: 1/-1; text-align:center;"><div class="loader"></div></div>';
 
       try {
         const res = await fetch(`${API_BASE}/api/search?query=${encodeURIComponent(q)}`);
@@ -62,24 +157,35 @@
 
         if (!json.success || !json.data || json.data.length === 0) {
           status.innerText = 'No movies found!';
+          grid.innerHTML = '';
           return;
         }
 
-        status.innerText = `Found ${json.count} movies:`;
+        status.innerText = `Showing results for "${q}" (${json.count} movies found):`;
+        grid.innerHTML = '';
+
         json.data.forEach(item => {
           const safeTitle = item.title.replace(/'/g, "\\'");
           const safeUrl = encodeURIComponent(item.pageUrl);
 
           grid.innerHTML += `
             <div class="card">
-              <img src="${item.poster}" alt="Poster">
-              <div class="card-title">${item.title}</div>
-              <button class="btn-dl" onclick="openDownloadModal('${safeUrl}', '${safeTitle}')">📥 Get File Links</button>
+              <div class="poster-wrap">
+                <span class="quality-badge">HD / 4K</span>
+                <img src="${item.poster}" alt="Poster" loading="lazy">
+              </div>
+              <div class="card-body">
+                <div class="card-title">${item.title}</div>
+                <button class="btn-dl" onclick="openDownloadModal('${safeUrl}', '${safeTitle}')">
+                  📥 Get Links
+                </button>
+              </div>
             </div>
           `;
         });
       } catch (err) {
-        status.innerText = 'Error loading movies!';
+        status.innerText = 'Error connecting to server!';
+        grid.innerHTML = '';
       }
     }
 
@@ -90,14 +196,17 @@
 
       modal.style.display = 'block';
       modalTitle.innerText = title;
-      modalBody.innerHTML = '<p style="color:#94a3b8;">Bypassing Cloudflare & Fetching links...</p>';
+      modalBody.innerHTML = `
+        <div class="loader"></div>
+        <p style="color:var(--text-muted); font-size:13px; margin-top:10px;">Bypassing Cloudflare & extracting links...</p>
+      `;
 
       try {
         const res = await fetch(`${API_BASE}/api/links?detailUrl=${encodedUrl}`);
         const json = await res.json();
 
         if (!json.success || !json.links || json.links.length === 0) {
-          modalBody.innerHTML = '<p style="color:#ef4444;">No links found for this movie.</p>';
+          modalBody.innerHTML = '<p style="color:#ef4444; font-size:13px;">No download links available for this title.</p>';
           return;
         }
 
@@ -105,17 +214,25 @@
         json.links.forEach(link => {
           modalBody.innerHTML += `
             <a href="${link.url}" target="_blank" rel="noopener noreferrer" class="dl-btn-single">
-              ${link.name}
+              <span>🚀</span> ${link.name}
             </a>
           `;
         });
       } catch (err) {
-        modalBody.innerHTML = '<p style="color:#ef4444;">Failed to fetch download links!</p>';
+        modalBody.innerHTML = '<p style="color:#ef4444; font-size:13px;">Failed to fetch download links!</p>';
       }
     }
 
     function closeModal() {
       document.getElementById('modal').style.display = 'none';
+    }
+
+    // Modal ke bahar click karne par modal close ho jayega
+    window.onclick = function(event) {
+      const modal = document.getElementById('modal');
+      if (event.target == modal) {
+        closeModal();
+      }
     }
   </script>
 
