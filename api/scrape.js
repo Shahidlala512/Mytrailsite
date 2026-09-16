@@ -4,7 +4,7 @@ export default async function handler(req, res) {
 
   const { query, detailUrl } = req.query;
 
-  // LAYER 2: Scrape Direct Download Links from Single Movie Page
+  // LAYER 2: Scrape Direct/Quality Links from Single Movie Page
   if (detailUrl) {
     try {
       const response = await fetch(detailUrl, {
@@ -21,33 +21,45 @@ export default async function handler(req, res) {
       const html = await response.text();
       const downloadLinks = [];
 
-      // Regex to find all download buttons / links on target detail page
+      // Target only the main content area (ignores sidebar & recommended movies)
+      const contentMatch = html.match(/<div[^>]*class="[^"]*(entry-content|post-content|download-links|thecontent)[^"]*"[\s\S]*?<\/div>/i);
+      const targetHtml = contentMatch ? contentMatch[0] : html;
+
+      // Extract <a> links from target content
       const linkRegex = /<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
       let match;
 
-      while ((match = linkRegex.exec(html)) !== null) {
+      while ((match = linkRegex.exec(targetHtml)) !== null) {
         const href = match[1];
-        const text = match[2].replace(/<[^>]+>/g, '').trim();
+        let text = match[2].replace(/<[^>]+>/g, '').trim();
 
-        // Filter out nav/junk links, keep download links & qualities
-        if (
-          href &&
-          !href.includes('#') &&
-          !href.includes('/category/') &&
-          !href.includes('/tag/') &&
-          !href.includes('/page/') &&
-          !href.endsWith('.jpg') &&
-          !href.endsWith('.png') &&
-          !href.endsWith('.css') &&
-          !href.endsWith('.js') &&
-          (text.toLowerCase().includes('download') || 
-           text.toLowerCase().includes('480p') || 
-           text.toLowerCase().includes('720p') || 
-           text.toLowerCase().includes('1080p') || 
-           href.includes('/link/') || 
-           href.includes('drive') || 
-           href.includes('t.me'))
-        ) {
+        // Check if link is a download/quality link
+        const isQualityOrDownload =
+          href.includes('/goto/') ||
+          href.includes('/link/') ||
+          href.includes('drive') ||
+          href.includes('gdflix') ||
+          href.includes('filepress') ||
+          href.includes('linkspoint') ||
+          text.toLowerCase().includes('download') ||
+          text.toLowerCase().includes('480p') ||
+          text.toLowerCase().includes('720p') ||
+          text.toLowerCase().includes('1080p');
+
+        // Exclude generic site pages and social links
+        const isJunk =
+          href.includes('#') ||
+          href.includes('/category/') ||
+          href.includes('/tag/') ||
+          href.includes('/page/') ||
+          href.endsWith('.jpg') ||
+          href.endsWith('.png') ||
+          href.endsWith('.css') ||
+          href.endsWith('.js') ||
+          href.includes('facebook.com') ||
+          href.includes('telegram');
+
+        if (isQualityOrDownload && !isJunk) {
           downloadLinks.push({
             name: text || 'Download Link',
             url: href
@@ -55,7 +67,7 @@ export default async function handler(req, res) {
         }
       }
 
-      // Deduplicate links
+      // Remove duplicates
       const uniqueLinks = [];
       const seen = new Set();
       for (const item of downloadLinks) {
