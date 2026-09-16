@@ -4,7 +4,39 @@ export default async function handler(req, res) {
 
   const { query, detailUrl } = req.query;
 
-  // LAYER 2: Extract Direct Download Links from Single Movie Page
+  // Helper function to automatically unwrap /goto/ links to final destination
+  async function resolveUrl(url) {
+    if (!url.includes('/goto/')) return url;
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        redirect: 'follow',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        }
+      });
+
+      // If HTTP redirect happened, get destination URL
+      if (response.url && response.url !== url && !response.url.includes('/goto/')) {
+        return response.url;
+      }
+
+      // If HTML redirect/button page, extract target link
+      const htmlText = await response.text();
+      const targetMatch =
+        htmlText.match(/href="([^"]*(?:linkspoint|gdflix|filepress|mega|gofile|drive)[^"]*)"/i) ||
+        htmlText.match(/location\.href\s*=\s*['"]([^'"]+)['"]/i);
+
+      if (targetMatch) {
+        return targetMatch[1];
+      }
+    } catch (e) {
+      // Fallback to original URL on error
+    }
+    return url;
+  }
+
+  // LAYER 2: Extract & Resolve Links from Single Movie Page
   if (detailUrl) {
     try {
       const response = await fetch(detailUrl, {
@@ -20,13 +52,13 @@ export default async function handler(req, res) {
 
       let html = await response.text();
 
-      // Step 1: Strip out Header, Footer, Sidebar, and Recommended sections from HTML
+      // Remove headers, footers, sidebars, related/recommended sections
       html = html.replace(/<header[\s\S]*?<\/header>/gi, '');
       html = html.replace(/<footer[\s\S]*?<\/footer>/gi, '');
       html = html.replace(/<aside[\s\S]*?<\/aside>/gi, '');
       html = html.replace(/<div[^>]*class="[^"]*(sidebar|related|recommended|widgets|popular)[^"]*"[\s\S]*?<\/div>/gi, '');
 
-      const downloadLinks = [];
+      const rawLinks = [];
       const linkRegex = /<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
       let match;
 
@@ -34,29 +66,21 @@ export default async function handler(req, res) {
         const href = match[1].trim();
         let text = match[2].replace(/<[^>]+>/g, '').trim();
 
-        // STRICT FILTER: If link is another MoviesMint movie post page (and NOT a /goto/ download link), REJECT IT!
         const isMoviesMintPost = (href.includes('moviesmint.app') || href.startsWith('/')) && !href.includes('/goto/');
 
-        // Junk filter
         const isJunk =
           isMoviesMintPost ||
           href.includes('#') ||
           href.includes('/category/') ||
           href.includes('/tag/') ||
           href.includes('/page/') ||
-          href.includes('/author/') ||
           href.endsWith('.jpg') ||
           href.endsWith('.png') ||
-          href.endsWith('.webp') ||
           href.endsWith('.css') ||
           href.endsWith('.js') ||
           href.includes('facebook.com') ||
-          href.includes('telegram') ||
-          href.includes('t.me') ||
-          href.includes('whatsapp') ||
-          href.includes('twitter');
+          href.includes('telegram');
 
-        // Check if it's a genuine link shortener or cloud drive URL
         const isGotoOrDriveLink =
           href.includes('/goto/') ||
           href.includes('/link/') ||
@@ -64,10 +88,7 @@ export default async function handler(req, res) {
           href.includes('gdflix') ||
           href.includes('filepress') ||
           href.includes('drive.google') ||
-          href.includes('mega.nz') ||
-          href.includes('pixeldrain') ||
-          href.includes('hubcloud') ||
-          href.includes('fastdl');
+          href.includes('mega.nz');
 
         const isDownloadText =
           text.toLowerCase().includes('download') ||
@@ -76,34 +97,45 @@ export default async function handler(req, res) {
           text.toLowerCase().includes('1080p') ||
           text.toLowerCase().includes('4k') ||
           text.toLowerCase().includes('gdrive') ||
-          text.toLowerCase().includes('direct link') ||
-          text.toLowerCase().includes('zip');
+          text.toLowerCase().includes('direct');
 
         if (!isJunk && (isGotoOrDriveLink || isDownloadText)) {
-          downloadLinks.push({
-            name: text || 'Download Link',
-            url: href
-          });
+          let fullHref = href;
+          if (href.startsWith('/')) {
+            fullHref = `https://moviesmint.app${href}`;
+          }
+          rawLinks.push({ name: text || 'Download Link', url: fullHref });
         }
       }
 
-      // Remove duplicates
-      const uniqueLinks = [];
+      // Deduplicate
+      const uniqueRaw = [];
       const seen = new Set();
-      for (const item of downloadLinks) {
+      for (const item of rawLinks) {
         if (!seen.has(item.url)) {
           seen.add(item.url);
-          uniqueLinks.push(item);
+          uniqueRaw.push(item);
         }
       }
 
-      return res.status(200).json({ success: true, links: uniqueLinks });
+      // Un-wrap all /goto/ links to their direct targets (linkspoint/gdflix) in parallel
+      const resolvedLinks = await Promise.all(
+        uniqueRaw.map(async (item) => {
+          const finalUrl = await resolveUrl(item.url);
+          return {
+            name: item.name,
+            url: finalUrl
+          };
+        })
+      );
+
+      return res.status(200).json({ success: true, links: resolvedLinks });
     } catch (err) {
       return res.status(500).json({ success: false, error: err.message });
     }
   }
 
-  // LAYER 1: Scrape Movie Search/Catalog Page
+  // LAYER 1: Search Catalog
   const targetUrl = `https://moviesmint.app/?s=${encodeURIComponent(query || 'Avatar')}`;
 
   try {
