@@ -4,39 +4,7 @@ export default async function handler(req, res) {
 
   const { query, detailUrl } = req.query;
 
-  // Helper function to automatically unwrap /goto/ links to final destination
-  async function resolveUrl(url) {
-    if (!url.includes('/goto/')) return url;
-    try {
-      const response = await fetch(url, {
-        method: 'GET',
-        redirect: 'follow',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        }
-      });
-
-      // If HTTP redirect happened, get destination URL
-      if (response.url && response.url !== url && !response.url.includes('/goto/')) {
-        return response.url;
-      }
-
-      // If HTML redirect/button page, extract target link
-      const htmlText = await response.text();
-      const targetMatch =
-        htmlText.match(/href="([^"]*(?:linkspoint|gdflix|filepress|mega|gofile|drive)[^"]*)"/i) ||
-        htmlText.match(/location\.href\s*=\s*['"]([^'"]+)['"]/i);
-
-      if (targetMatch) {
-        return targetMatch[1];
-      }
-    } catch (e) {
-      // Fallback to original URL on error
-    }
-    return url;
-  }
-
-  // LAYER 2: Extract & Resolve Links from Single Movie Page
+  // LAYER 2: Get Download Links for a Specific Movie
   if (detailUrl) {
     try {
       const response = await fetch(detailUrl, {
@@ -52,20 +20,21 @@ export default async function handler(req, res) {
 
       let html = await response.text();
 
-      // Remove headers, footers, sidebars, related/recommended sections
+      // Remove non-content areas
       html = html.replace(/<header[\s\S]*?<\/header>/gi, '');
       html = html.replace(/<footer[\s\S]*?<\/footer>/gi, '');
       html = html.replace(/<aside[\s\S]*?<\/aside>/gi, '');
       html = html.replace(/<div[^>]*class="[^"]*(sidebar|related|recommended|widgets|popular)[^"]*"[\s\S]*?<\/div>/gi, '');
 
-      const rawLinks = [];
+      const downloadLinks = [];
       const linkRegex = /<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
       let match;
 
       while ((match = linkRegex.exec(html)) !== null) {
         const href = match[1].trim();
-        let text = match[2].replace(/<[^>]+>/g, '').trim();
+        let rawText = match[2].replace(/<[^>]+>/g, '').trim();
 
+        // Exclude internal movie pages that are NOT /goto/ links
         const isMoviesMintPost = (href.includes('moviesmint.app') || href.startsWith('/')) && !href.includes('/goto/');
 
         const isJunk =
@@ -81,55 +50,49 @@ export default async function handler(req, res) {
           href.includes('facebook.com') ||
           href.includes('telegram');
 
-        const isGotoOrDriveLink =
+        const isDownloadable =
           href.includes('/goto/') ||
           href.includes('/link/') ||
           href.includes('linkspoint') ||
           href.includes('gdflix') ||
           href.includes('filepress') ||
-          href.includes('drive.google') ||
-          href.includes('mega.nz');
+          rawText.toLowerCase().includes('download') ||
+          rawText.toLowerCase().includes('480p') ||
+          rawText.toLowerCase().includes('720p') ||
+          rawText.toLowerCase().includes('1080p') ||
+          rawText.toLowerCase().includes('4k');
 
-        const isDownloadText =
-          text.toLowerCase().includes('download') ||
-          text.toLowerCase().includes('480p') ||
-          text.toLowerCase().includes('720p') ||
-          text.toLowerCase().includes('1080p') ||
-          text.toLowerCase().includes('4k') ||
-          text.toLowerCase().includes('gdrive') ||
-          text.toLowerCase().includes('direct');
-
-        if (!isJunk && (isGotoOrDriveLink || isDownloadText)) {
-          let fullHref = href;
+        if (!isJunk && isDownloadable) {
+          let fullUrl = href;
           if (href.startsWith('/')) {
-            fullHref = `https://moviesmint.app${href}`;
+            fullUrl = `https://moviesmint.app${href}`;
           }
-          rawLinks.push({ name: text || 'Download Link', url: fullHref });
+
+          // Format clean button label
+          let cleanLabel = rawText || 'Download Link';
+          if (/480p/i.test(rawText)) cleanLabel = '⚡ Download 480p [Server Link]';
+          else if (/720p/i.test(rawText)) cleanLabel = '⚡ Download 720p [Server Link]';
+          else if (/1080p/i.test(rawText)) cleanLabel = '⚡ Download 1080p [Server Link]';
+          else if (/4k/i.test(rawText)) cleanLabel = '⚡ Download 4K [Server Link]';
+
+          downloadLinks.push({
+            name: cleanLabel,
+            url: fullUrl
+          });
         }
       }
 
       // Deduplicate
-      const uniqueRaw = [];
+      const uniqueLinks = [];
       const seen = new Set();
-      for (const item of rawLinks) {
+      for (const item of downloadLinks) {
         if (!seen.has(item.url)) {
           seen.add(item.url);
-          uniqueRaw.push(item);
+          uniqueLinks.push(item);
         }
       }
 
-      // Un-wrap all /goto/ links to their direct targets (linkspoint/gdflix) in parallel
-      const resolvedLinks = await Promise.all(
-        uniqueRaw.map(async (item) => {
-          const finalUrl = await resolveUrl(item.url);
-          return {
-            name: item.name,
-            url: finalUrl
-          };
-        })
-      );
-
-      return res.status(200).json({ success: true, links: resolvedLinks });
+      return res.status(200).json({ success: true, links: uniqueLinks });
     } catch (err) {
       return res.status(500).json({ success: false, error: err.message });
     }
